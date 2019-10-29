@@ -1,0 +1,294 @@
+---
+title: "Chapter 13 R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(tidyverse)
+library(nycflights13)
+```
+
+#13.2 Exercises
+```{r}
+head(flights)
+head(airlines)
+head(airports)
+head(planes)
+head(weather)
+
+airports
+```
+
+###Exercise 1 
+Obviously, to calculate the plane's route, we will need the origin and destination. Therefore, we would combine the "airport" and "flights" tables (variables: origin, lat, long, destination) 
+
+###Exercise 2
+Both "airport" and "weather" are related to origin. The "airport" table includes information on the destination airports as well, whereas the "weather" table contains only information concerning the New York airports. In other words, both tables are connected by the LGA, JFK, and EWR airports.
+
+###Exercise 3
+If the "weather" table, contained information on all airports in the USA, "weather" would also connect to "flights" via destination.  
+
+###Exercise 4
+I guess we could create a new data map for special days (holidays?)?
+
+
+#13.3 Exercises
+
+###Exercise 1
+Add a surrogate key to "flights"
+```{r}
+flights %>%
+  mutate(id=row_number(day))
+```
+###Exercise 2
+```{r setup}
+install.packages("nasaweather")
+install.packages("fueleconomy")
+```
+
+Identify the keys in the following data sets:
+```{r}
+Lahman::Batting
+babynames::babynames
+nasaweather::atmos
+fueleconomy::vehicles
+ggplot2::diamonds
+```
+
+```{r}
+Lahman::Batting %>%
+  count(playerID, yearID, stint) %>%
+  filter(n>1)
+```
+  Primary Key: (playerID, yearID, stint)  
+
+```{r}
+babynames::babynames  %>%
+  count(year, name, sex) %>%
+  filter(n>1)
+```
+  Primary Key: (year, name, sex)  
+
+```{r}
+nasaweather::atmos  %>%
+  count(lat, long, year, month) %>%
+  filter(n>1)
+```
+  Primary Key: (lat, long, year, month)
+
+```{r}
+fueleconomy::vehicles  %>%
+  count(id) %>%
+  filter(n>1)
+```
+  Primary Key: (id)  
+
+```{r}
+ggplot2::diamonds  %>%
+  count(carat, cut, color, clarity, depth, table, price, x, y, z) %>%
+  filter(n>1)
+```
+  Primary Key: THERE IS NONE! 
+  
+###Exercise 3
+Uhh...well, I can't really draw a diagram. Instead, I'll just list it out!
+```{r}
+Lahman::Batting
+Lahman::Master
+Lahman::Salaries
+```
+Batting & Master & Salaries share "playerID." 
+
+```{r}
+Lahman::Master  %>%
+  count(playerID) %>%
+  filter(n>1)
+
+Lahman::Batting  %>%
+  count(playerID) %>%
+  filter(n>1)
+
+Lahman::Salaries  %>%
+  count(playerID) %>%
+  filter(n>1)
+```
+"playerID" is the primary key of Master, and a foreign key of Batting & Salaries.  
+
+```{r}
+Lahman::Master
+Lahman::Managers
+Lahman::AwardsManagers
+
+Lahman::Managers  %>%
+  count(yearID, teamID, inseason) %>%
+  filter(n>1)
+
+Lahman::AwardsManagers %>%
+  count(playerID, yearID, awardID) %>%
+  filter(n>1)
+```
+Master & Managers & AwardManagers share playerID. 
+The yearID and lgID in Managers is not the same as the yearID and lgID in AwardManagers. 
+
+```{r}
+Lahman::Batting
+Lahman::Pitching
+Lahman::Fielding
+```
+
+#13.4 Exercises
+
+###Exercise 1
+Avg Delay by Destination
+```{r}
+flightsTemp <- flights %>%
+  group_by(dest) %>%
+  summarise(delay = mean(arr_delay, na.rm = TRUE)) %>%
+  inner_join(airports, c("dest"="faa"))
+flightsTemp
+```
+
+
+```{r}
+flightsTemp %>%
+    ggplot(aes(lon, lat)) +
+    borders("state") +
+    geom_point(aes(color=delay)) +
+    coord_quickmap()
+```
+
+###Exercise 2
+Add location (lat and long) of origin AND destination to flights
+```{r}
+airports
+
+airportsTemp <- airports %>%
+  select(faa, lat, lon)
+
+flights3 <- flights %>%
+  left_join(airportsTemp, c(dest="faa")) %>%
+  left_join(airportsTemp, c(origin="faa"))
+
+flights3
+rename(flights3, c("lat.x"="origin_lat", "lat.y"="dest_lat", "lon.x"="origin_lon", "lon.y"="dest_lon"))
+```
+
+###Exercise 3
+Is there relationship between age of plane and its delays?
+```{r}
+planes2<-planes %>%
+  inner_join(flights, by="tailnum") %>%
+  transmute(tailnum=tailnum, year=year.x,dep_delay=dep_delay, arr_delay=arr_delay) %>%
+  group_by(year) %>%
+  summarise(dep_delay=mean(dep_delay, na.rm=TRUE), arr_delay=mean(arr_delay, na.rm=TRUE))
+
+arrange(planes2, desc(dep_delay))
+
+ggplot(data=planes2)+
+  geom_point(aes(year, dep_delay, color="dep_delay"))+
+  geom_point(aes(year, arr_delay, color="arr_delay"))+
+  xlim(1985, 2015)+
+  ylim(-5, 20)+
+  ylab("delay")
+```
+Hmm, it seems like planes made in the early/mid 2000s tend to have larger delays than other years.
+
+
+###Exercise 4
+What weather condition affects delays
+```{r}
+temp<-flights%>%
+  group_by(origin, year, month, day, hour)%>%
+  summarise(dep_delay=mean(dep_delay, na.rm=TRUE))%>%
+  inner_join(weather, by=c("origin", "year", "month", "day", "hour"))
+```
+
+###Exercise 5
+June 13, 2013
+```{r}
+temp2<-flights%>%
+  group_by(dest, year, month, day, hour)%>%
+  summarise(arr_delay=mean(arr_delay, na.rm=TRUE))%>%
+  filter(year==2013, month==6, day==13)%>%
+  arrange(desc(arr_delay))
+
+temp2
+```
+Woah! There were some crazy large arrival delays!
+```{r}
+temp2%>%
+  group_by(dest)%>%
+  summarise(arr_delay=mean(arr_delay, na.rm=TRUE))%>%
+  arrange(desc(arr_delay))
+```
+Tennessee had the largest delays and, according to Google, it was suffering from derechos (wind/rain storm) during that time!  
+
+#13.5 Exercises
+
+###Exercise 1
+Missing tailnum
+
+```{r}
+filter(flights, !is.na(tailnum))
+flights%>%
+  filter(is.na(tailnum))%>%
+  arrange(desc(dep_time))
+```
+Flights are that are missing tail numbers are flights that never left! (AKA: these flights were cancelled)
+
+###Exercise 2
+Planes that have flown at least 100 flights
+```{r}
+temp<-flights%>%
+  group_by(tailnum)%>%
+  count()%>%
+  filter(n>=100)
+
+flights %>%
+  semi_join(temp)
+```
+
+###Exercise 3
+Vehicles vs common
+```{r}
+fueleconomy::vehicles
+fueleconomy::common
+
+fueleconomy::vehicles%>%
+  semi_join(fueleconomy::common, by=c("make", "model"))
+```
+
+###Exercise 4
+Worst 48 hours of delays
+```{r}
+yup<-flights%>%
+  group_by(month, day)%>%
+  summarise(dep_delay=mean(dep_delay, na.rm=TRUE), arr_delay=mean(arr_delay, na.rm=TRUE))
+  
+arrange(yup, desc(dep_delay))
+filter(yup, month==6 & (day==24 | day==25))
+```
+On average, it looks like June 24 and 25 are the worst 48 hours of delays.
+
+
+```{r}
+flights%>%
+  filter(month==6 & (day==24 | day==25))%>%
+  group_by(year, month, day, hour)%>%
+  summarise(dep_delay=mean(dep_delay, na.rm=TRUE))%>%
+  left_join(weather, by=c("year", "month", "day", "hour"))
+```
+WEll, I don't see any notable correlation between weather and delay...I may have done this one wrong.
+
+###Exercise 5
+```{r}
+View(airports)
+
+anti_join(flights, airports, by = c("dest" = "faa"))
+```
+This lists flights where the destination doesn't have a match in airports. I don't know why they don't have a match...are those airports special for some reason?
+
+```{r}
+anti_join(airports, flights, by = c("faa" = "dest"))
+```
+This list airports that were never a destination in flights. In other words, no plane in "flights" flew to these airports.
